@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Meal Spinner (MVP)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Keyframes for a fun spinning effect */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-fast {
+            animation: spin 0.2s linear infinite;
+        }
+        .interactable {
+            transition: all 0.15s ease-in-out;
+        }
+        .interactable:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .interactable:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4F46E5', /* Indigo */
+                        'secondary': '#10B981', /* Emerald */
+                        'accent': '#F59E0B', /* Amber */
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <div id="app" class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 w-full max-w-lg">
+        <h1 class="text-3xl font-extrabold text-gray-800 text-center mb-6">
+            The Meal Decider 🍽️
+        </h1>
+        <p class="text-center text-gray-500 mb-8">
+            Select a meal category and hit 'Spin' to randomly decide what you're having!
+        </p>
+
+        <!-- Category Selection (Levers) -->
+        <div class="mb-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <!-- Buttons are dynamically controlled by JavaScript -->
+            <button id="btn-breakfast" data-category="breakfast" class="category-btn interactable bg-gray-200 text-gray-700 font-medium py-3 px-2 rounded-lg hover:bg-gray-300 transition-colors">
+                Breakfast
+            </button>
+            <button id="btn-brunch" data-category="brunch" class="category-btn interactable bg-gray-200 text-gray-700 font-medium py-3 px-2 rounded-lg hover:bg-gray-300 transition-colors">
+                Brunch
+            </button>
+            <button id="btn-lunch" data-category="lunch" class="category-btn interactable bg-gray-200 text-gray-700 font-medium py-3 px-2 rounded-lg hover:bg-gray-300 transition-colors">
+                Lunch
+            </button>
+            <button id="btn-dinner" data-category="dinner" class="category-btn interactable bg-gray-200 text-gray-700 font-medium py-3 px-2 rounded-lg hover:bg-gray-300 transition-colors">
+                Dinner
+            </button>
+        </div>
+
+        <!-- Spin Area -->
+        <div class="flex flex-col items-center justify-center space-y-6">
+            <div id="spinner-display" class="w-24 h-24 flex items-center justify-center rounded-full bg-primary text-white shadow-lg transition-all duration-300 ease-in-out">
+                <!-- SVG Icon for spinning visual -->
+                <svg id="spinner-icon" class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0h-2.5m2.5 0a7.962 7.962 0 014.129 1.765M16 16v-5h-.582m0 0a8.001 8.001 0 01-15.356-2m15.356 2h2.5m-2.5 0a7.962 7.962 0 00-4.129-1.765"></path>
+                </svg>
+            </div>
+
+            <button id="spin-btn" class="interactable w-full bg-secondary text-white font-bold text-xl py-4 px-6 rounded-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-600 transition-colors">
+                SPIN TO DECIDE!
+            </button>
+        </div>
+
+        <!-- Result Display -->
+        <div id="result-box" class="mt-8 p-6 bg-accent/20 rounded-lg text-center border-l-4 border-accent hidden">
+            <h3 class="text-xl font-semibold text-gray-800">Your Meal Suggestion:</h3>
+            <p id="result-text" class="text-3xl font-extrabold text-accent mt-2">
+                <!-- Result will be inserted here -->
+            </p>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // --- Core Data ---
+        const MEAL_OPTIONS = {
+            breakfast: [
+                "Pancakes", "Scrambled Eggs & Toast", "Oatmeal", "Yogurt Parfait", "Breakfast Burrito", "Cereal"
+            ],
+            brunch: [
+                "Eggs Benedict", "French Toast", "Avocado Toast", "Waffles", "Quiche", "Bagels & Lox"
+            ],
+            lunch: [
+                "Salad", "Sandwich/Deli Meat", "Soup", "Leftovers", "Wrap", "Tuna Melt", "Pizza Slice"
+            ],
+            dinner: [
+                "Pasta", "Tacos", "Stir Fry", "Pizza", "Steak", "Chicken Curry", "Burgers", "Fish & Veggies"
+            ]
+        };
+
+        // --- DOM Elements ---
+        const categoryButtons = document.querySelectorAll('.category-btn');
+        const spinButton = document.getElementById('spin-btn');
+        const spinnerIcon = document.getElementById('spinner-icon');
+        const resultBox = document.getElementById('result-box');
+        const resultText = document.getElementById('result-text');
+
+        // --- State Management ---
+        let currentCategory = 'dinner'; // Default category
+        let isSpinning = false;
+        const SPIN_DURATION_MS = 2000;
+
+        /**
+         * Initializes the app by setting up event listeners and the default state.
+         */
+        function initApp() {
+            // 1. Set up category selection listeners
+            categoryButtons.forEach(button => {
+                button.addEventListener('click', () => selectCategory(button.dataset.category));
+            });
+
+            // 2. Set up spin button listener
+            spinButton.addEventListener('click', spinWheel);
+
+            // 3. Set the initial category style
+            selectCategory(currentCategory);
+        }
+
+        /**
+         * Updates the UI state and data based on the selected meal category.
+         * @param {string} category - The selected meal category key ('breakfast', 'lunch', etc.).
+         */
+        function selectCategory(category) {
+            if (isSpinning) return;
+
+            currentCategory = category;
+
+            // Update button styles
+            categoryButtons.forEach(btn => {
+                btn.classList.remove('bg-primary', 'text-white', 'hover:bg-indigo-600');
+                btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+
+                if (btn.dataset.category === category) {
+                    btn.classList.add('bg-primary', 'text-white', 'hover:bg-indigo-600');
+                    btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                }
+            });
+
+            // Hide previous result
+            resultBox.classList.add('hidden');
+        }
+
+        /**
+         * Starts the spinning animation and determines the random meal.
+         */
+        function spinWheel() {
+            if (isSpinning) return;
+
+            const options = MEAL_OPTIONS[currentCategory];
+            if (!options || options.length === 0) {
+                resultText.textContent = "No options available for this category!";
+                resultBox.classList.remove('hidden');
+                return;
+            }
+
+            isSpinning = true;
+            spinButton.disabled = true;
+            resultBox.classList.add('hidden');
+            resultText.textContent = "";
+
+            // Start spinning animation
+            spinnerIcon.classList.add('animate-spin-fast');
+
+            // Simulate the spin delay
+            setTimeout(() => {
+                // Stop spinning
+                spinnerIcon.classList.remove('animate-spin-fast');
+
+                // Pick a random meal
+                const randomIndex = Math.floor(Math.random() * options.length);
+                const finalResult = options[randomIndex];
+
+                // Display result
+                resultText.textContent = finalResult;
+                resultBox.classList.remove('hidden');
+
+                // Reset state
+                isSpinning = false;
+                spinButton.disabled = false;
+
+            }, SPIN_DURATION_MS); // 2 seconds simulated spin
+        }
+
+        // Wait for the window to load before running the initialization function
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
